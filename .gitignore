@@ -1,0 +1,9 @@
+# Ambientes e Segredos
+.env
+.venv/
+__pycache__/
+*.pyc
+
+# IDEs
+.vscode/
+.idea/

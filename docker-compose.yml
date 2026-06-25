@@ -2,7 +2,23 @@ version: '3.8'
 
 services:
   # ----------------------------------------
-  # 1. Evolution API (Motor do WhatsApp)
+  # 1. Banco de Dados da Evolution API (NOVO)
+  # ----------------------------------------
+  evolution-postgres:
+    image: postgres:15-alpine
+    container_name: evolution_postgres
+    restart: always
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=evolution
+    ports:
+      - "5432:5432"
+    volumes:
+      - evolution_postgres_data:/var/lib/postgresql/data
+
+  # ----------------------------------------
+  # 2. Evolution API (Motor do WhatsApp)
   # ----------------------------------------
   evolution-api:
     image: atendai/evolution-api:latest
@@ -15,16 +31,29 @@ services:
       - DOCKER_ENV=true
       - LOG_LEVEL=ERROR,WARN,DEBUG,INFO,LOG,VERBOSE,DARK,WEBHOOKS
       - AUTHENTICATION_TYPE=apikey
-      - AUTHENTICATION_API_KEY=sua_chave_secreta_aqui # Troque por uma hash segura
-      # Configurações de Webhook global (apontando para o nosso futuro backend Python)
+      - AUTHENTICATION_API_KEY=1234
+      
+      # [CORREÇÃO] Configuração Obrigatória do Banco de Dados
+      - DATABASE_ENABLED=true
+      - DATABASE_PROVIDER=postgresql
+      - DATABASE_CONNECTION_URI=postgresql://postgres:postgres@evolution-postgres:5432/evolution?schema=public
+      
+      # [OTIMIZAÇÃO] Cache local para não precisarmos subir um Redis agora
+      - CACHE_REDIS_ENABLED=false
+      - CACHE_LOCAL_ENABLED=true
+      
+      # Webhooks globais apontando para nossa futura API Python
       - WEBHOOK_GLOBAL_URL=http://host.docker.internal:8000/api/v1/webhooks/evolution
       - WEBHOOK_GLOBAL_ENABLED=true
       - WEBHOOK_GLOBAL_EVENTS=APPLICATION_STARTUP,QRCODE_UPDATED,MESSAGES_UPSERT,MESSAGES_UPDATE,MESSAGES_DELETE,SEND_MESSAGE,CONNECTION_UPDATE
     volumes:
       - evolution_instances:/evolution/instances
+    # Garante que a API só inicie DEPOIS que o banco estiver de pé
+    depends_on:
+      - evolution-postgres
 
   # ----------------------------------------
-  # 2. Prometheus (Coletor de Métricas)
+  # 3. Prometheus (Coletor de Métricas)
   # ----------------------------------------
   prometheus:
     image: prom/prometheus:latest
@@ -39,7 +68,7 @@ services:
       - '--config.file=/etc/prometheus/prometheus.yml'
 
   # ----------------------------------------
-  # 3. Grafana (Dashboard de Observabilidade)
+  # 4. Grafana (Dashboard de Observabilidade)
   # ----------------------------------------
   grafana:
     image: grafana/grafana:latest
@@ -49,7 +78,7 @@ services:
       - "3000:3000"
     environment:
       - GF_SECURITY_ADMIN_USER=admin
-      - GF_SECURITY_ADMIN_PASSWORD=admin # Troque em produção
+      - GF_SECURITY_ADMIN_PASSWORD=admin
     volumes:
       - grafana_data:/var/lib/grafana
     depends_on:
@@ -57,5 +86,6 @@ services:
 
 volumes:
   evolution_instances:
+  evolution_postgres_data: # Novo volume para os dados do Postgres
   prometheus_data:
   grafana_data:
