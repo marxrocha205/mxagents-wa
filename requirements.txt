@@ -25,3 +25,8 @@ prometheus-client
 # ==========================================
 pytest
 pytest-asyncio
+
+
+sqlalchemy
+asyncpg
+alembic
