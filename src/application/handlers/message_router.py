@@ -1,5 +1,9 @@
 import logging
 from .text_handler import TextMessageHandler
+from .image_handler import ImageMessageHandler
+from .audio_handler import AudioMessageHandler
+from .document_handler import DocumentMessageHandler
+from src.infrastructure.metrics.counters import MESSAGES_RECEIVED
 
 logger = logging.getLogger(__name__)
 
@@ -9,24 +13,20 @@ class MessageRouter:
     quem vai processar a mensagem baseado no seu tipo.
     """
     def __init__(self):
-        # Mapeamento dos tipos nativos do WhatsApp para nossas classes de negócio
         self.strategies = {
             "conversation": TextMessageHandler(),
             "extendedTextMessage": TextMessageHandler(),
-            # No futuro:
-            # "audioMessage": AudioMessageHandler(),
-            # "imageMessage": ImageMessageHandler(),
-            # "documentMessage": DocumentMessageHandler(),
+            "imageMessage": ImageMessageHandler(),
+            "audioMessage": AudioMessageHandler(),
+            "documentMessage": DocumentMessageHandler(),
         }
 
     async def route(self, payload: dict):
-        """Avalia o payload do webhook e aciona a estratégia correta."""
         if payload.get("event") != "messages.upsert":
             return
 
         message_info = payload.get("data", {}).get("message", {})
 
-        # Prevenção de loop infinito: ignorar mensagens que o próprio bot enviou
         if message_info.get("fromMe") or message_info.get("isGroup"):
             return
 
@@ -37,9 +37,11 @@ class MessageRouter:
         if not message_content:
             return
 
-        # O WhatsApp envia o tipo da mensagem como a primeira chave do dicionário
-        # Ex: {"audioMessage": {...}} ou {"conversation": "..."}
         message_type = next(iter(message_content.keys()), None)
+        
+        # Incrementa métricas
+        if message_type:
+            MESSAGES_RECEIVED.labels(message_type=message_type).inc()
         
         handler = self.strategies.get(message_type)
         

@@ -1,7 +1,7 @@
-from fastapi import FastAPI, Request, BackgroundTasks
+from fastapi import FastAPI, Request, BackgroundTasks, Response
 import logging
+from prometheus_client import generate_latest, CONTENT_TYPE_LATEST
 from src.config.settings import settings
-from src.application.services.message_handler import MessageHandlerService
 from src.application.handlers.message_router import MessageRouter
 
 # Configuração de log
@@ -17,24 +17,27 @@ app = FastAPI(
     version="1.0.0"
 )
 
-# Instanciamos nosso serviço (Cérebro)
-message_handler = MessageHandlerService()
+
 router = MessageRouter()
 
 @app.get("/")
 async def health_check():
     return {"status": "ok", "environment": settings.ENVIRONMENT}
 
+@app.get("/metrics")
+async def metrics():
+    """Endpoint para o Prometheus realizar o scrape das métricas."""
+    return Response(content=generate_latest(), media_type=CONTENT_TYPE_LATEST)
+
 @app.post("/api/v1/webhooks/evolution")
 async def evolution_webhook(request: Request, background_tasks: BackgroundTasks):
     """
     Recebe todos os eventos da Evolution API.
     Usamos BackgroundTasks para responder '200 OK' instantaneamente para a Evolution,
-    enquanto processamos a mensagem em segundo plano.
+    enquanto roteamos e processamos a mensagem em segundo plano.
     """
     payload = await request.json()
     
-    # Adiciona a tarefa de processar a mensagem em uma thread separada
-    background_tasks.add_task(message_handler.process_webhook_payload, payload)
+    background_tasks.add_task(router.route, payload)
     
     return {"status": "received"}
